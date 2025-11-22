@@ -99,7 +99,7 @@ def rotate_keys():
     print("➡️ Cleared RSA_PUBLIC_KEY_2")
 
     print("Selecting data from the table we created")
-    fetch_all_records_from_table = conn.raw_sql("SELECT * FROM HEALTH_EXP LIMIT 10").fetchall()
+    fetch_all_records_from_table = conn.raw_sql("SELECT * FROM XORQ_TEST.PUBLIC.HEALTH_EXP LIMIT 10").fetchall()
     print(fetch_all_records_from_table)
 
     # Return the new private key in PEM bytes
