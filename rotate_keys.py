@@ -2,7 +2,6 @@ import os
 import base64
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
-import snowflake.connector
 import xorq.api as xo
 
 
@@ -53,7 +52,6 @@ def rotate_keys():
     current_key = load_private_key_from_github()
 
     conn = connect_with_private_key(current_key)
-    cur = conn.cursor()
 
     # Generate new key pair
     new_key_obj, new_private_pem, new_public_pem = generate_rsa_keypair()
@@ -61,25 +59,24 @@ def rotate_keys():
     print("🔑 Generated new RSA key pair")
 
     # Install as RSA_PUBLIC_KEY_2 (standby)
-    cur.execute(
+    conn.sql(
         f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY_2='{new_public_pem.decode()}'"
     )
     print("➡️ Installed new key into RSA_PUBLIC_KEY_2")
 
     # Promote standby to primary
-    cur.execute(
+    conn.sql(
         f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY='{new_public_pem.decode()}'"
     )
     print("➡️ Promoted new key to RSA_PUBLIC_KEY")
 
     # Clear old secondary key
-    cur.execute(
+    conn.sql(
         f"ALTER USER {SF_USER} UNSET RSA_PUBLIC_KEY_2"
     )
     print("➡️ Cleared RSA_PUBLIC_KEY_2")
 
-    cur.close()
-    conn.close()
+    conn.sql()
 
     return new_private_pem
 
