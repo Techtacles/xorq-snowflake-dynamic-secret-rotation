@@ -10,7 +10,6 @@ SF_USER = os.environ["SF_USER"]
 SF_ACCOUNT = os.environ["SF_ACCOUNT"]
 SF_PRIVATE_KEY = os.environ["SNOWFLAKE_PRIVATE_KEY_B64"]  # stored in GitHub secret
 
-
 def load_private_key_from_github():
     key_bytes = base64.b64decode(SF_PRIVATE_KEY)
     return serialization.load_pem_private_key(key_bytes, password=None)
@@ -44,38 +43,59 @@ def connect_with_private_key(private_key_obj):
         user=SF_USER,
         account=SF_ACCOUNT,
         private_key=pk_der,
+        role="ACCOUNTADMIN"
     )
 
 
-def rotate_keys():
-    # Load the existing key from GitHub Secrets
-    current_key = load_private_key_from_github()
+def pem_to_snowflake_key(pem_bytes):
+    pem_str = pem_bytes.decode()
+    lines = pem_str.replace("-----BEGIN PUBLIC KEY-----", "") \
+                   .replace("-----END PUBLIC KEY-----", "") \
+                   .replace("\n", "")
+    return lines
 
+
+def rotate_keys():
+    """
+    Rotate the Snowflake key pair for the user using Xorq.
+    Generates a new RSA key pair, installs the public key as standby,
+    promotes it to primary, and removes the old secondary key.
+    Returns the new private key in PEM bytes.
+    """
+
+    def pem_to_snowflake_key(pem_bytes):
+        """
+        Convert a PEM-formatted public key to the Snowflake-compatible
+        single-line base64 format.
+        """
+        pem_str = pem_bytes.decode()
+        return pem_str.replace("-----BEGIN PUBLIC KEY-----", "") \
+                      .replace("-----END PUBLIC KEY-----", "") \
+                      .replace("\n", "") \
+                      .strip()  # Added strip() to remove any whitespace
+
+    # Load the existing private key from GitHub secret
+    current_key = load_private_key_from_github()
     conn = connect_with_private_key(current_key)
 
-    # Generate new key pair
+    # Generate a new RSA key pair
     new_key_obj, new_private_pem, new_public_pem = generate_rsa_keypair()
-
+    sf_public_key = pem_to_snowflake_key(new_public_pem)
     print("🔑 Generated new RSA key pair")
 
-    # Install as RSA_PUBLIC_KEY_2 (standby)
-    conn.sql(
-        f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY_2='{new_public_pem.decode()}'"
-    ).execute()
+    # Install as standby public key (RSA_PUBLIC_KEY_2)
+    conn.raw_sql(f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY_2='{sf_public_key}'").fetchone()
     print("➡️ Installed new key into RSA_PUBLIC_KEY_2")
 
-    # Promote standby to primary
-    conn.sql(
-        f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY='{new_public_pem.decode()}'"
-    ).execute()
+    # Promote the standby key to primary (RSA_PUBLIC_KEY)
+    conn.raw_sql(f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY='{sf_public_key}'").fetchone()
     print("➡️ Promoted new key to RSA_PUBLIC_KEY")
 
-    # Clear old secondary key
-    conn.sql(
-        f"ALTER USER {SF_USER} UNSET RSA_PUBLIC_KEY_2"
-    ).execute()
+    # Clear the old secondary key
+    conn.raw_sql(f"ALTER USER {SF_USER} UNSET RSA_PUBLIC_KEY_2").fetchone()
     print("➡️ Cleared RSA_PUBLIC_KEY_2")
 
+    # Return the new private key in PEM bytes
     return new_private_pem
 
 
