@@ -61,22 +61,20 @@ def rotate_keys():
     # Install as RSA_PUBLIC_KEY_2 (standby)
     conn.sql(
         f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY_2='{new_public_pem.decode()}'"
-    )
+    ).execute()
     print("➡️ Installed new key into RSA_PUBLIC_KEY_2")
 
     # Promote standby to primary
     conn.sql(
         f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY='{new_public_pem.decode()}'"
-    )
+    ).execute()
     print("➡️ Promoted new key to RSA_PUBLIC_KEY")
 
     # Clear old secondary key
     conn.sql(
         f"ALTER USER {SF_USER} UNSET RSA_PUBLIC_KEY_2"
-    )
+    ).execute()
     print("➡️ Cleared RSA_PUBLIC_KEY_2")
-
-    conn.sql()
 
     return new_private_pem
 
