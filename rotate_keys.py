@@ -77,6 +77,8 @@ def rotate_keys():
     # Load the existing private key from GitHub secret
     current_key = load_private_key_from_github()
     conn = connect_with_private_key(current_key)
+    print("get current role")
+    print(conn.raw_sql(f"SELECT CURRENT_ROLE()").fetchone())
 
     # Generate a new RSA key pair
     new_key_obj, new_private_pem, new_public_pem = generate_rsa_keypair()
@@ -84,6 +86,7 @@ def rotate_keys():
     print("🔑 Generated new RSA key pair")
 
     # Install as standby public key (RSA_PUBLIC_KEY_2)
+    print(f"Setting RSA_PUBLIC_KEY_2 (length: {len(sf_public_key)} chars)")
     conn.raw_sql(f"ALTER USER {SF_USER} SET RSA_PUBLIC_KEY_2='{sf_public_key}'").fetchone()
     print("➡️ Installed new key into RSA_PUBLIC_KEY_2")
 
@@ -94,6 +97,10 @@ def rotate_keys():
     # Clear the old secondary key
     conn.raw_sql(f"ALTER USER {SF_USER} UNSET RSA_PUBLIC_KEY_2").fetchone()
     print("➡️ Cleared RSA_PUBLIC_KEY_2")
+
+    print("Selecting data from the table we created")
+    fetch_all_records_from_table = conn.raw_sql("SELECT * FROM HEALTH_EXP LIMIT 10").fetchall()
+    print(fetch_all_records_from_table)
 
     # Return the new private key in PEM bytes
     return new_private_pem
@@ -111,3 +118,4 @@ if __name__ == "__main__":
     new_private_key = rotate_keys()
     update_github_secret(new_private_key)
     print("✅ Rotation complete; new key saved to file for GitHub Actions secret update")
+    
